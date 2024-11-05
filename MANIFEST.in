@@ -1,0 +1,8 @@
+# Include all Python files and package metadata
+include *.md
+include LICENSE
+include setup.py
+
+# Include all data files in xequinet/utils/basis and xequinet/utils/pre_computed
+recursive-include xequinet/utils/basis *
+recursive-include xequinet/utils/pre_computed *

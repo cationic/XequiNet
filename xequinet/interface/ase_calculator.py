@@ -21,10 +21,12 @@ class XeqCalculator(Calculator):
         "spin": 0,
     }
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, model=None, **kwargs) -> None:
         self.model = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         Calculator.__init__(self, **kwargs)
+        if model:
+            self.model = model
     
     def set(self, **kwargs) -> None:
         changed_parameters = Calculator.set(self, **kwargs)
@@ -32,7 +34,6 @@ class XeqCalculator(Calculator):
             self.reset()
         if "ckpt_file" in changed_parameters or self.model is None:
             self.model = torch.jit.load(self.parameters.ckpt_file, map_location=self.device)
-
 
     def calculate(
         self,
