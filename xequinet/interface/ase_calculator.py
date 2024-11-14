@@ -110,7 +110,7 @@ class XeqCalculator(Calculator):
 
         # Process common results
         self.results["energy"] = model_res["energy"].item()
-        self.results["forces"] = model_res["forces"].detach().cpu().numpy()
+        self.results["forces"] = - model_res["gradient"].detach().cpu().numpy()
 
         # Process MD-specific results
         if self.model_type == "md":
