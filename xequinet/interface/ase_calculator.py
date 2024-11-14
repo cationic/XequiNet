@@ -104,8 +104,8 @@ class XeqCalculator(Calculator):
         model_res: Dict[str, torch.Tensor] = self.model(**model_inputs)
         
         if self.model_type == "geometry":
-            self.results["energy"] = model_res["energy"].item() * units.eV  # Hartree to eV
-            self.results["forces"] = - model_res["gradient"].detach().cpu().numpy() * units.eV / units.Angstrom  # Convert Ha/Bohr to eV/Angstrom
+            self.results["energy"] = model_res["energy"].item() * units.Hartree  # Hartree to eV
+            self.results["forces"] = - model_res["gradient"].detach().cpu().numpy() * units.Hartree / units.Bohr  # Convert Ha/Bohr to eV/Angstrom
         elif self.model_type == "md":
             self.results["energy"] = model_res["energy"].item()
             self.results["forces"] = model_res["forces"].detach().cpu().numpy()
