@@ -2,6 +2,7 @@ from typing import Dict, Optional
 import torch
 from ase.stress import full_3x3_to_voigt_6_stress
 from ase.calculators.calculator import Calculator, all_changes
+from ase import units
 from ..utils import radius_graph_pbc
 
 class XeqCalculator(Calculator):
@@ -9,7 +10,7 @@ class XeqCalculator(Calculator):
     ASE calculator for XequiNet models.
     Supports both MD and geometry optimization model types.
     """
-    implemented_properties = ["energy", "forces"] 
+    implemented_properties = ["energy"]  # Common properties for both types
     default_parameters = {
         "cutoff": 5.0,
         "max_edges": 100,
@@ -32,9 +33,6 @@ class XeqCalculator(Calculator):
             ckpt_file: Path to the model checkpoint file. Defaults to None.
             model: Pre-loaded model instance. Defaults to None.
             **kwargs: Additional parameters for the Calculator.
-            
-        Raises:
-            ValueError: If both ckpt_file and model are None, or if model_type is invalid.
         """
         if model_type not in ["md", "geometry"]:
             raise ValueError("model_type must be either 'md' or 'geometry'")
@@ -42,9 +40,11 @@ class XeqCalculator(Calculator):
         self.model_type = model_type
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Add type-specific properties for MD model
+        # Add additional properties
         if self.model_type == "md":
-            self.implemented_properties += ["energies", "stress", "stresses"]
+            self.implemented_properties += ["energies", "stress", "stresses", "forces"]
+        else:
+            self.implemented_properties += ["gradient"]
         
         # Initialize model
         self.model = None
@@ -56,15 +56,6 @@ class XeqCalculator(Calculator):
             raise ValueError("Either ckpt_file or model must be provided")
             
         super().__init__(**kwargs)
-
-    def set(self, **kwargs) -> None:
-        """
-        Note: ckpt_file parameter is no longer supported through set().
-        Model should be initialized through __init__().
-        """
-        changed_parameters = Calculator.set(self, **kwargs)
-        if changed_parameters:
-            self.reset()
 
     def calculate(
         self,
@@ -79,9 +70,13 @@ class XeqCalculator(Calculator):
         # Common inputs for both model types
         positions = self.atoms.positions
         at_no = torch.from_numpy(self.atoms.numbers).to(torch.long).to(self.device)
-        coord = torch.from_numpy(positions).to(torch.get_default_dtype()).to(self.device)
         
-        # Prepare model inputs based on type
+        # Convert coordinates from Angstrom to Bohr if needed
+        if self.model_type == "geometry":
+            coord = torch.from_numpy(positions / units.Bohr).to(torch.get_default_dtype()).to(self.device) # Angstrom to Bohr
+        elif self.model_type == "md":
+            coord = torch.from_numpy(positions).to(torch.get_default_dtype()).to(self.device)
+        
         model_inputs = {
             "at_no": at_no,
             "coord": coord,
@@ -107,18 +102,18 @@ class XeqCalculator(Calculator):
 
         # Run model
         model_res: Dict[str, torch.Tensor] = self.model(**model_inputs)
-
-        # Process common results
-        self.results["energy"] = model_res["energy"].item()
-        self.results["forces"] = - model_res["gradient"].detach().cpu().numpy()
-
-        # Process MD-specific results
-        if self.model_type == "md":
-            self.results["energies"] = model_res["energies"].detach().cpu().numpy()
+        
+        if self.model_type == "geometry":
+            self.results["energy"] = model_res["energy"].item() * units.eV  # Hartree to eV
+            self.results["forces"] = - model_res["gradient"].detach().cpu().numpy() * units.eV / units.Angstrom  # Convert Ha/Bohr to eV/Angstrom
+        elif self.model_type == "md":
+            self.results["energy"] = model_res["energy"].item()
+            self.results["forces"] = model_res["forces"].detach().cpu().numpy()
+            self.results["energies"] = model_res["energies"].detach().cpu().numpy() 
             
             # Process stress and stresses if cell is 3D
             if self.atoms.cell.rank == 3:
-                virials = model_res["virials"].detach().cpu().numpy()
+                virials = model_res["virials"].detach().cpu().numpy() 
                 virial = model_res["virial"].detach().cpu().numpy()
                 self.results["stress"] = full_3x3_to_voigt_6_stress(virial) / self.atoms.get_volume()
                 self.results["stresses"] = full_3x3_to_voigt_6_stress(virials) / self.atoms.get_volume()
