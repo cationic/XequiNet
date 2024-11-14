@@ -18,10 +18,10 @@ setup(
         'e3nn>=0.5',
         'pydantic>=2.6',
         'ase>=3.22',
+        'pyscf>=2.4'
         #==== Extra requirements ====#
         #--------- Geo. Opt. --------#
         # geometric>=1.0
-        # pyscf>=2.4
         #----------- PIMD -----------#
         # ipi>=2.6
         #------ Delta Learning ------#
